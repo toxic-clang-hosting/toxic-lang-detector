@@ -1,0 +1,22 @@
+{
+  "name": "toxic-language-detector",
+  "version": "1.0.0",
+  "description": "3-layer antisocial language detector for online games",
+  "main": "main.js",
+  "scripts": {
+    "start": "node server.js",
+    "web": "node server.js",
+    "electron": "electron ."
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@google/generative-ai": "^0.21.0",
+    "dotenv": "^17.3.1",
+    "express": "^4.21.0",
+    "openai": "^4.85.0",
+    "papaparse": "^5.4.1"
+  },
+  "devDependencies": {
+    "electron": "^34.0.0"
+  }
+}

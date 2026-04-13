@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>In-Game Chat Prototype - Control</title>
+    <style>
+        :root {
+            --bg-color: #000;
+            --chat-bg: #ffffff;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --secondary: #e5e7eb;
+            --text-main: #111827;
+            --text-sub: #6b7280;
+            --danger: #ef4444;
+            --success: #10b981;
+            --bubble-me: #4f46e5;
+            --bubble-them: #f3f4f6;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background: var(--bg-color);
+        }
+
+        /* --- Intro Screen Styles --- */
+        #introScreen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.9); z-index: 100; display: flex;
+            align-items: center; justify-content: center; backdrop-filter: blur(5px);
+        }
+        .intro-card {
+            background: white; padding: 40px; border-radius: 12px;
+            max-width: 600px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .intro-card p { font-size: 1.1rem; line-height: 1.6; color: var(--text-main); margin-bottom: 20px; }
+        .start-btn {
+            background: var(--primary); color: white; border: none; padding: 15px 30px;
+            border-radius: 8px; font-weight: bold; font-size: 1.1rem;
+            cursor: pointer; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4); transition: background 0.2s;
+        }
+        .start-btn:hover { background: var(--primary-hover); }
+
+        /* --- Timer Styles --- */
+        #timerDisplay {
+            position: fixed; top: 20px; right: 20px;
+            background: rgba(0,0,0,0.7); color: white; padding: 10px 20px; border-radius: 8px;
+            font-family: monospace; font-size: 1.5rem; font-weight: bold;
+            z-index: 50; display: none;
+        }
+
+        /* --- Main Layout --- */
+        #video-background {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1; pointer-events: none; overflow: hidden;
+        }
+        #player {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            min-width: 100%; min-height: 100%; width: 115vw; height: 65vw;
+        }
+
+        .main-wrapper {
+            display: none; flex-direction: column; align-items: flex-end; justify-content: center;
+            height: 100vh; position: relative; z-index: 1; padding-right: 10vw;
+        }
+
+        .chat-container {
+            width: 380px; height: 550px; background: var(--chat-bg);
+            border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            display: flex; flex-direction: column; overflow: hidden; position: relative;
+        }
+
+        .chat-header { padding: 16px; border-bottom: 1px solid var(--secondary); font-weight: 600; display: flex; justify-content: space-between; }
+        .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth; }
+        .message { max-width: 80%; padding: 10px 14px; border-radius: 18px; font-size: 0.95rem; line-height: 1.4; }
+        .message.them { align-self: flex-start; background: var(--bubble-them); border-bottom-left-radius: 4px; }
+        .message.me { align-self: flex-end; background: var(--bubble-me); color: white; border-bottom-right-radius: 4px; }
+        .input-area { padding: 16px; border-top: 1px solid var(--secondary); display: flex; gap: 10px; background: var(--chat-bg); }
+        input[type="text"] { flex: 1; padding: 12px; border: 1px solid var(--secondary); border-radius: 24px; outline: none; }
+        button.send-btn { background: var(--primary); color: white; border: none; padding: 0 20px; border-radius: 24px; cursor: pointer; font-weight: 600; }
+
+        #finishBtn { display: none; margin-top: 20px; padding: 15px 30px; background: #10b981; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+
+<div id="introScreen">
+    <div class="intro-card">
+        <h2 style="margin-top: 0;">Instructions</h2>
+          <p>You will be interacting with another live participant and will be shown a simulated gaming screen to test a new chatbox. Chat as if you are playing a fast-paced multiplayer competitive game.</p>
+        <p><strong>You must chat and send messages for 5 minutes to receive credit.</strong></p>
+        <p>After chatting, you will be automatically redirected to finish the survey.</p>
+        <button class="start-btn" onclick="startChat()">Click to start interactive chat</button>
+    </div>
+</div>
+
+<div id="timerDisplay">05:00</div>
+
+<div id="video-background">
+    <div id="player"></div>
+</div>
+
+<div class="main-wrapper" id="mainChatUI">
+    <div class="chat-container">
+        <div class="chat-header">
+            <span>In-Game Chat</span>
+            <span style="font-size: 0.8rem; color: #10b981;">● Match Live</span>
+        </div>
+
+        <div class="chat-messages" id="messagesList"></div>
+
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Type here..." autocomplete="off">
+            <button class="send-btn" id="sendBtn">Send</button>
+        </div>
+    </div>
+
+    <button id="finishBtn" onclick="finishStudy()">
+        Finish Chat & Continue Survey
+    </button>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const participantData = {
+        userId: urlParams.get('uid') || 'anonymous_user',
+        sessionStart: new Date().toISOString(),
+        logs: []
+    };
+
+    let ytPlayer;
+    let totalSeconds = 300; 
+    let timerInterval;
+
+    function onYouTubeIframeAPIReady() {
+        ytPlayer = new YT.Player('player', {
+            videoId: 'FqbHyRvTCt8',
+            playerVars: { 'autoplay': 1, 'controls': 0, 'mute': 1, 'loop': 1, 'playlist': 'FqbHyRvTCt8', 'start': 60 },
+            events: { 'onReady': (event) => { event.target.playVideo(); } }
+        });
+    }
+
+    // --- Automated Bot Script (Identical across all conditions) ---
+    const scriptedMessages = [
+        { time: 5000, text: "i've literally never played this game before lol" },
+        { time: 15000, text: "hey can you help me figure out what's going on in this match?" },
+        { time: 35000, text: "are you actually this stupid or just pretending?" },
+        { time: 55000, text: "uninstall the game right now, you suck so much." },
+        { time: 75000, text: "how much did you pay to get carried to this rank? idiot." },
+        { time: 100000, text: "you are literally the worst player I have ever seen." },
+        { time: 120000, text: "what are you doing? help the team for once." },
+        { time: 145000, text: "im done playing with you, enjoy the loss." },
+        { time: 170000, text: "gg, we lose because our teammate is a brain dead bot." },
+        { time: 195000, text: "report this guy for throwing, absolute trash." },
+        { time: 220000, text: "wow, great job dying again. really helpful." },
+        { time: 245000, text: "is your monitor even turned on?" },
+        { time: 265000, text: "imagine being this bad at a free game." },
+        { time: 285000, text: "nice aim... do you play with a steering wheel?" }
+    ];
+
+    function startChat() {
+        document.getElementById('introScreen').style.display = 'none';
+        document.getElementById('mainChatUI').style.display = 'flex';
+        document.getElementById('timerDisplay').style.display = 'block';
+
+        timerInterval = setInterval(updateTimer, 1000);
+        
+        scriptedMessages.forEach(msg => {
+            setTimeout(() => {
+                addMessageToChat(msg.text, 'them');
+                saveLog(msg.text, 'bot_message', null);
+            }, msg.time);
+        });
+
+        setTimeout(() => { 
+            document.getElementById('finishBtn').style.display = 'block';
+            finishStudy(); 
+        }, 300000);
+    }
+
+    function updateTimer() {
+        totalSeconds--;
+        let mins = Math.floor(totalSeconds / 60);
+        let secs = totalSeconds % 60;
+        document.getElementById('timerDisplay').innerText = `0${mins}:${secs < 10 ? '0' + secs : secs}`;
+        if (totalSeconds <= 0) clearInterval(timerInterval);
+    }
+
+    // --- Chat & Hidden Logging Logic ---
+    const input = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const toxicKeywords = ['stupid', 'idiot', 'suck', 'fuck', 'bitch', 'trash', 'bot'];
+
+    sendBtn.addEventListener('click', handleSend);
+    input.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
+
+    async function handleSend() {
+        const text = input.value.trim();
+        if (!text) return;
+        
+        // In Control: Message goes directly to chat
+        addMessageToChat(text, 'me');
+        input.value = '';
+
+        const isToxic = toxicKeywords.some(kw => text.toLowerCase().includes(kw));
+
+        if (isToxic) {
+            // Background detection for Parity: log the AI's verdict even if user doesn't see it
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: [{ message: text }] })
+                });
+                const data = await response.json();
+                saveLog(text, 'control_toxic_send', data.results[0]);
+            } catch (error) {
+                saveLog(text, 'control_toxic_send_error', null);
+            }
+        } else {
+            saveLog(text, 'control_normal_send', null);
+        }
+    }
+
+    function saveLog(msg, type, apiData) {
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            content: msg,
+            interactionType: type,
+            apiVerdict: apiData // This gives you the Layer 3 results for comparison
+        };
+        participantData.logs.push(logEntry);
+    }
+
+    function addMessageToChat(text, sender) {
+        const div = document.createElement('div');
+        div.classList.add('message', sender);
+        div.textContent = text;
+        const list = document.getElementById('messagesList');
+        list.appendChild(div);
+        list.scrollTop = list.scrollHeight;
+    }
+
+    function finishStudy() {
+        const dataString = JSON.stringify(participantData.logs);
+        const encodedData = encodeURIComponent(dataString);
+        const myUserId = participantData.userId;
+        const qualtricsBaseUrl = "https://qualtricsxmsm35hk9by.qualtrics.com/jfe/form/SV_8oYwbTh7QBrUbeS";
+        const finalUrl = `${qualtricsBaseUrl}?chat_logs=${encodedData}&survey1_id=${myUserId}`;
+        window.top.location.href = finalUrl;
+    }
+</script>
+</body>
+</html>

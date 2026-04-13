@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self';" />
+  <title>Toxic Language Detector</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ── Header ── -->
+  <header class="app-header">
+    <div class="header-title">
+      <span class="header-icon">🛡️</span>
+      <h1>Toxic Language Detector</h1>
+      <span class="header-sub">3-Layer Antisocial Analysis</span>
+    </div>
+    <button class="btn-icon" id="btn-settings" title="Settings">⚙️</button>
+  </header>
+
+  <!-- ── Settings Panel (slide-in) ── -->
+  <aside class="settings-panel" id="settings-panel">
+    <div class="settings-header">
+      <h2>Settings</h2>
+      <button class="btn-icon" id="btn-settings-close">✕</button>
+    </div>
+
+    <!-- Provider, model, and API key are configured server-side (.env) -->
+    <div style="display:none">
+      <select id="sel-provider">
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+        <option value="google">Google Gemini</option>
+      </select>
+      <select id="inp-model"></select>
+      <input id="inp-apikey" type="password" autocomplete="off" />
+    </div>
+
+    <div class="setting-group">
+      <label>Delay between requests (ms)</label>
+      <input id="inp-delay" type="number" value="300" min="0" max="5000" />
+    </div>
+
+    <button class="btn-primary full-width" id="btn-save-settings">Save Settings</button>
+    <div class="settings-status" id="settings-status"></div>
+  </aside>
+  <div class="overlay" id="overlay"></div>
+
+  <!-- ── Main content ── -->
+  <main class="main">
+    <!-- Tab bar -->
+    <nav class="tab-bar">
+      <button class="tab active" data-tab="single">Single Message</button>
+      <button class="tab" data-tab="batch">Batch CSV</button>
+    </nav>
+
+    <!-- ── Single Message Tab ── -->
+    <section class="tab-content active" id="tab-single">
+      <div class="single-layout">
+        <div class="input-area">
+          <label class="field-label">Target Message</label>
+          <textarea id="inp-message" placeholder="Enter the game chat message to analyze…" rows="4"></textarea>
+
+          <label class="field-label">Context Window <span class="field-hint">(optional – prior messages)</span></label>
+          <textarea id="inp-context" placeholder="Paste prior chat lines here for context…" rows="3"></textarea>
+
+          <button class="btn-primary" id="btn-analyze-single">Analyze Message</button>
+        </div>
+
+        <div class="result-area" id="single-result">
+          <div class="result-placeholder">Run analysis to see results</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Batch CSV Tab ── -->
+    <section class="tab-content" id="tab-batch">
+      <div class="batch-toolbar">
+        <button class="btn-secondary" id="btn-load-csv">Load CSV</button>
+        <span class="batch-hint">CSV must have a <code>message</code> column. Optional: <code>context</code> column.</span>
+        <div class="spacer"></div>
+        <button class="btn-primary" id="btn-analyze-batch" disabled>Analyze All</button>
+        <button class="btn-secondary" id="btn-export-csv" disabled>Export Results</button>
+      </div>
+
+      <div class="batch-preview" id="batch-preview">
+        <div class="result-placeholder">Load a CSV file to preview messages</div>
+      </div>
+
+      <div class="batch-progress" id="batch-progress" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <span id="progress-label">0 / 0</span>
+      </div>
+
+      <div class="batch-results" id="batch-results"></div>
+    </section>
+  </main>
+
+  <input type="file" id="file-input" accept=".csv" style="display:none" />
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>In-Game Chat Prototype - Intervention</title>
+    <style>
+        :root {
+            --bg-color: #000;
+            --chat-bg: #ffffff;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --secondary: #e5e7eb;
+            --text-main: #111827;
+            --text-sub: #6b7280;
+            --danger: #ef4444;
+            --success: #10b981;
+            --bubble-me: #4f46e5;
+            --bubble-them: #f3f4f6;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background: var(--bg-color);
+        }
+
+        /* --- Intro Screen Styles --- */
+        #introScreen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.9); z-index: 100; display: flex;
+            align-items: center; justify-content: center; backdrop-filter: blur(5px);
+        }
+        .intro-card {
+            background: white; padding: 40px; border-radius: 12px;
+            max-width: 600px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .intro-card p { font-size: 1.1rem; line-height: 1.6; color: var(--text-main); margin-bottom: 20px; }
+        .start-btn {
+            background: var(--primary); color: white; border: none; padding: 15px 30px;
+            border-radius: 8px; font-weight: bold; font-size: 1.1rem;
+            cursor: pointer; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4); transition: background 0.2s;
+        }
+        .start-btn:hover { background: var(--primary-hover); }
+
+        /* --- Timer Styles --- */
+        #timerDisplay {
+            position: fixed; top: 20px; right: 20px;
+            background: rgba(0,0,0,0.7); color: white; padding: 10px 20px; border-radius: 8px;
+            font-family: monospace; font-size: 1.5rem; font-weight: bold;
+            z-index: 50; display: none;
+        }
+
+        /* --- Main Layout --- */
+        #video-background {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1; pointer-events: none; overflow: hidden;
+        }
+        #player {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            min-width: 100%; min-height: 100%; width: 115vw; height: 65vw;
+        }
+
+        .main-wrapper {
+            display: none; flex-direction: column; align-items: flex-end; justify-content: center;
+            height: 100vh; position: relative; z-index: 1; padding-right: 10vw;
+        }
+
+        .chat-container {
+            width: 380px; height: 550px; background: var(--chat-bg);
+            border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            display: flex; flex-direction: column; overflow: hidden; position: relative;
+        }
+
+        .chat-header { padding: 16px; border-bottom: 1px solid var(--secondary); font-weight: 600; display: flex; justify-content: space-between; }
+        .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth; }
+        .message { max-width: 80%; padding: 10px 14px; border-radius: 18px; font-size: 0.95rem; line-height: 1.4; }
+        .message.them { align-self: flex-start; background: var(--bubble-them); border-bottom-left-radius: 4px; }
+        .message.me { align-self: flex-end; background: var(--bubble-me); color: white; border-bottom-right-radius: 4px; }
+        .input-area { padding: 16px; border-top: 1px solid var(--secondary); display: flex; gap: 10px; background: var(--chat-bg); }
+        input[type="text"] { flex: 1; padding: 12px; border: 1px solid var(--secondary); border-radius: 24px; outline: none; }
+        button.send-btn { background: var(--primary); color: white; border: none; padding: 0 20px; border-radius: 24px; cursor: pointer; font-weight: 600; }
+        
+        /* Modal Styles */
+        .modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; backdrop-filter: blur(4px); z-index: 10; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-card { background: white; width: 85%; padding: 24px; border-radius: 16px; transform: translateY(10px); transition: transform 0.3s ease; }
+        .modal-overlay.active .modal-card { transform: translateY(0); }
+        .suggestion-box { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 8px; margin-bottom: 20px; min-height: 40px;}
+        .actions { display: flex; flex-direction: column; gap: 8px; }
+        .btn-primary { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .btn-secondary { background: transparent; color: var(--text-sub); border: 1px solid var(--secondary); padding: 10px; border-radius: 8px; cursor: pointer; }
+        .btn-link { background: none; border: none; color: var(--text-sub); font-size: 0.8rem; text-decoration: underline; cursor: pointer; }
+
+        #finishBtn { display: none; margin-top: 20px; padding: 15px 30px; background: #10b981; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        #finishBtn:hover { background: #059669; }
+    </style>
+</head>
+<body>
+
+<div id="introScreen">
+    <div class="intro-card">
+        <h2 style="margin-top: 0;">Instructions</h2>
+        <p>You will be interacting with another live participant and will be shown a simulated gaming screen to test a new chatbox. Chat as if you are playing a fast-paced multiplayer competitive game.</p>
+        <p><strong>You must chat and send messages for 5 minutes to receive credit.</strong></p>
+        <p>After chatting, you will be automatically redirected to finish the survey.</p>
+        <button class="start-btn" onclick="startChat()">Click to start interactive chat</button>
+    </div>
+</div>
+
+<div id="timerDisplay">05:00</div>
+
+<div id="video-background">
+    <div id="player"></div>
+</div>
+
+<div class="main-wrapper" id="mainChatUI">
+    <div class="chat-container">
+        <div class="chat-header">
+            <span>In-Game Chat</span>
+            <span style="font-size: 0.8rem; color: #10b981;">● Match Live</span>
+        </div>
+
+        <div class="chat-messages" id="messagesList">
+            </div>
+
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Type here..." autocomplete="off">
+            <button class="send-btn" id="sendBtn">Send</button>
+        </div>
+
+        <div class="modal-overlay" id="interventionModal">
+            <div class="modal-card">
+                <h3 style="margin-top:0">Pause for a moment</h3>
+                <p style="font-size: 0.9rem; color: var(--text-sub);">We detected language that might not be constructive.</p>
+                <div class="suggestion-box">
+                    <span id="aiSuggestionText" style="color: #166534; font-weight: 500;">...</span>
+                </div>
+                <div class="actions">
+                    <button class="btn-primary" onclick="acceptSuggestion()">Use Suggestion</button>
+                    <button class="btn-secondary" onclick="cancelSend()">Edit / Cancel</button>
+                    <button class="btn-link" onclick="sendOriginal()">Send original anyway</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button id="finishBtn" onclick="finishStudy()">
+        Finish Chat & Continue Survey
+    </button>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const participantData = {
+        userId: urlParams.get('uid') || 'anonymous_user',
+        sessionStart: new Date().toISOString(),
+        logs: []
+    };
+
+    let ytPlayer;
+    let modalStartTime = 0;
+    let originalMessage = "";
+
+    function onYouTubeIframeAPIReady() {
+        ytPlayer = new YT.Player('player', {
+            videoId: 'FqbHyRvTCt8',
+            playerVars: { 'autoplay': 1, 'controls': 0, 'mute': 1, 'loop': 1, 'playlist': 'FqbHyRvTCt8', 'start': 60 },
+            events: { 'onReady': (event) => { event.target.playVideo(); } }
+        });
+    }
+
+    // --- Automated Bot Script ---
+    // Times are in milliseconds (e.g., 10000 = 10 seconds after starting)
+    const scriptedMessages = [
+        { time: 5000, text: "i've literally never played this game before lol" },
+        { time: 15000, text: "hey can you help me figure out what's going on in this match?" },
+        { time: 35000, text: "are you actually this stupid or just pretending?" },
+        { time: 55000, text: "uninstall the game right now, you suck so much." },
+        { time: 75000, text: "how much did you pay to get carried to this rank? idiot." },
+        { time: 100000, text: "you are literally the worst player I have ever seen." },
+        { time: 120000, text: "what are you doing? help the team for once." },
+        { time: 145000, text: "im done playing with you, enjoy the loss." },
+        { time: 170000, text: "gg, we lose because our teammate is a brain dead bot." },
+        { time: 195000, text: "report this guy for throwing, absolute trash." },
+        { time: 220000, text: "wow, great job dying again. really helpful." },
+        { time: 245000, text: "is your monitor even turned on?" },
+        { time: 265000, text: "imagine being this bad at a free game." },
+        { time: 285000, text: "nice aim... do you play with a steering wheel?" }
+    ];
+
+    function scheduleBotMessages() {
+        scriptedMessages.forEach(msg => {
+            setTimeout(() => {
+                addMessageToChat(msg.text, 'them');
+                // Optional: Save what the bot said to your Qualtrics logs so you have the full transcript
+                saveLog(msg.text, 'bot_message', 0);
+            }, msg.time);
+        });
+    }
+
+    // --- Timer & Flow Logic ---
+    let totalSeconds = 300; // 5 minutes
+    let timerInterval;
+
+    function startChat() {
+        document.getElementById('introScreen').style.display = 'none';
+        document.getElementById('mainChatUI').style.display = 'flex';
+        document.getElementById('timerDisplay').style.display = 'block';
+
+        timerInterval = setInterval(updateTimer, 1000);
+        
+        // Start the bot message scheduler!
+        scheduleBotMessages();
+
+        setTimeout(() => { finishStudy(); }, 300000);
+    }
+
+    function updateTimer() {
+        totalSeconds--;
+        let mins = Math.floor(totalSeconds / 60);
+        let secs = totalSeconds % 60;
+        if (secs < 10) secs = "0" + secs;
+        document.getElementById('timerDisplay').innerText = "0" + mins + ":" + secs;
+        if (totalSeconds <= 0) clearInterval(timerInterval);
+    }
+
+    // --- Chat & Intervention Logic ---
+    const input = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const modal = document.getElementById('interventionModal');
+    const aiText = document.getElementById('aiSuggestionText');
+
+    const toxicKeywords = ['stupid', 'idiot', 'suck', 'fuck', 'bitch', 'trash', 'bot'];
+
+    sendBtn.addEventListener('click', handleSend);
+    input.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
+
+    function handleSend() {
+        const text = input.value.trim();
+        if (!text) return;
+        
+        const isToxic = toxicKeywords.some(kw => text.toLowerCase().includes(kw));
+        
+        if (isToxic) {
+            originalMessage = text;
+            input.value = ''; // Clear input immediately
+            triggerIntervention(text);
+        } else {
+            addMessageToChat(text, 'me');
+            saveLog(text, 'direct_send', 0);
+            input.value = '';
+        }
+    }
+
+// --- API Integration ---
+  async function triggerIntervention(text) {
+        if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
+        modalStartTime = Date.now();
+        
+        // 1. Show modal with a loading state
+        aiText.textContent = "AI is generating a suggestion...";
+        aiText.style.color = "#6b7280"; // Gray out text while loading
+        modal.classList.add('active');
+
+        try {
+            // Send the message to the 3-layer Node.js backend
+            const response = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages: [{ message: text }] // The server expects an array of messages
+                })
+            });
+
+            if (!response.ok) throw new Error("Server rejected the request");
+            
+            const data = await response.json();
+            
+            // ---> THE DEBUGGER LOG: Look for this in your Browser's Inspect > Console tab! <---
+            console.log("SERVER DATA:", data);
+
+            const analysis = data.results[0]; // Get the first message's result
+            const layer3 = analysis.layer3;   // Layer 3 contains the final verdict
+
+            // If we are here, let's get the suggestion from the AI's response.
+            const rewrittenText = (layer3 && layer3.replacement_suggestion) 
+                ? layer3.replacement_suggestion 
+                : "Let's focus on the objective and work together.";
+            
+            // 2. Update UI with the result
+            aiText.textContent = rewrittenText;
+            aiText.style.color = "#166534"; // Turn text green when ready
+
+        } catch (error) {
+            console.error("API Error:", error);
+            
+            // Array of 5-6 backup messages in lowercase gamer tone
+            const fallbackMessages = [
+                "let's try something else",
+                "maybe rephrase that?",
+                "let's keep it constructive",
+                "we can do better than that",
+                "take a breath, focus up",
+                "how about a different approach?"
+            ];
+            
+            // Pick a random message from the list
+            const randomFallback = fallbackMessages[Math.floor(Math.random() * fallbackMessages.length)];
+            
+            aiText.textContent = randomFallback;
+            aiText.style.color = "#166534";
+        }
+    }
+
+    function getLatency() { return (Date.now() - modalStartTime) / 1000; }
+
+    function saveLog(msg, type, latency) {
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            content: msg,
+            interactionType: type,
+            latencySeconds: latency
+        };
+        participantData.logs.push(logEntry);
+        console.log("Log saved locally:", logEntry);
+    }
+
+    window.acceptSuggestion = function() {
+        const latency = getLatency();
+        addMessageToChat(aiText.textContent, 'me');
+        saveLog(aiText.textContent, 'accepted_suggestion', latency);
+        resumeExperiment();
+    };
+
+    window.sendOriginal = function() {
+        const latency = getLatency();
+        addMessageToChat(originalMessage, 'me');
+        saveLog(originalMessage, 'sent_original', latency);
+        resumeExperiment();
+    };
+
+    window.cancelSend = function() {
+        const latency = getLatency();
+        saveLog(originalMessage, 'cancelled', latency);
+        
+        // Put the original text back into the text box so they can actually edit it
+        const inputField = document.getElementById('messageInput');
+        inputField.value = originalMessage; 
+        inputField.focus(); // Automatically puts their cursor back in the box
+        
+        resumeExperiment();
+    };
+
+    function resumeExperiment() {
+        modal.classList.remove('active');
+        if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo();
+    }
+
+    function addMessageToChat(text, sender) {
+        const div = document.createElement('div');
+        div.classList.add('message', sender);
+        div.textContent = text;
+        const messagesList = document.getElementById('messagesList');
+        messagesList.appendChild(div);
+        messagesList.scrollTop = messagesList.scrollHeight; // Auto-scroll to bottom
+    }
+
+    function finishStudy() {
+        const dataString = JSON.stringify(participantData.logs);
+        const encodedData = encodeURIComponent(dataString);
+        const myUserId = participantData.userId;
+        const qualtricsBaseUrl = "https://qualtricsxmsm35hk9by.qualtrics.com/jfe/form/SV_8oYwbTh7QBrUbeS";
+        const finalUrl = qualtricsBaseUrl + "?chat_logs=" + encodedData + "&survey1_id=" + myUserId;
+        window.top.location.href = finalUrl;
+    }
+</script>
+</body>
+</html>
