@@ -105,6 +105,73 @@ Mapping rules:
 - For replacement_suggestion, rewrite the original message to remove the toxic content while PRESERVING the user's original game-related intent, tone, and EXACT casing (e.g., if the original message is all lowercase, the suggestion MUST be all lowercase; if ALL CAPS, use ALL CAPS). Use casual gamer slang (e.g., 'unlucky', 'my bad', 'lag', 'nt', 'focus up', 'mb') so it sounds like a real player, not a robotic moderator. Keep it extremely concise. If the original message is purely toxic with no underlying strategy or intent, provide a generic neutral/positive gaming phrase that matches their casing (e.g., 'let's just play', 'ggs', 'need help').
 - override=CLEAR_ALL OR harm_candidate=false → verdict=SAFE, action=NO_ACTION, recommended_report_categories=[], replacement_suggestion=null.`;
 
+// ── Fast mode: single combined prompt (all 3 layers in one API call) ─────────
+const COMBINED_SYSTEM = `You are an expert content moderation analyst for online gaming platforms.
+Analyze the given game chat message in THREE sequential steps and return all results in one JSON object.
+
+STEP 1 — Category Detection (Layer 1)
+Determine if the message belongs to any of these 5 categories:
+1. Verbal Harassment – direct insult, blame, or humiliation targeting a specific person
+2. Identity-Based Attack – targeting protected attributes (race, gender, religion, sexuality, nationality, disability, etc.)
+3. Threat / Intimidation – coercion, threats, or punitive pressure intended to intimidate
+4. Verbal Griefing – provoking, tilting, or intentionally disrupting others' experience
+5. Profanity / General Hostility – aggressive swearing, explicit language, or generalized hostile remarks
+
+STEP 2 — Edge-Case Policy Filter (Layer 2)
+Only if harm was detected in Step 1, check if any override applies:
+- Identify the grammatical target: "I/me/my" = SELF, "you/your/they/name" = OTHER
+- Apply the FIRST matching rule:
+  CLEAR_ALL: A. Self-directed frustration only (✅ "I suck" ❌ "you suck")
+             B. Neutral strategy/gameplay with NO profanity — if the message contains ANY swear word (fuck, shit, damn, ass, etc.) Rule B does NOT apply even if the intent is strategic. (✅ "that push was bad" ✅ "we should retreat" ❌ "can we fucking retreat" ❌ "we should fucking retreat")
+             C. Quoting harmful language to condemn it
+  DOWNGRADE: D. Clearly mutual consensual banter (both parties)
+             E. Genuinely ambiguous target or intent
+  KEEP:      F. None of the above — clear antisocial behavior
+
+STEP 3 — Final Decision (Layer 3)
+Based on Steps 1 & 2, produce the final verdict.
+Available report categories: "offensive language", "verbal abuse", "negative attitude", "inappropriate name", "spamming", "intentional feeding", "assisting enemy team", "unskilled player", "refusing to communicate with team", "leaving the game / AFK"
+- override=KEEP or DOWNGRADE → verdict=HARMFUL, action=RECOMMEND
+- override=CLEAR_ALL or harm_candidate=false → verdict=SAFE, action=NO_ACTION, replacement_suggestion=null
+- For HARMFUL messages: ALWAYS provide a non-null replacement_suggestion. Preserve the user's game-related intent and EXACT casing. Use casual gamer slang (e.g. 'mb', 'nt', 'focus up', 'unlucky'). Sound like a real player, not a bot.
+
+Return ONLY valid JSON in this exact schema (no markdown, no text outside the JSON):
+{
+  "layer1": {
+    "categories_detected": ["<category name>", ...],
+    "primary_category": "<category name or null>",
+    "confidence_per_category": {
+      "Verbal Harassment": <0.0–1.0>,
+      "Identity-Based Attack": <0.0–1.0>,
+      "Threat / Intimidation": <0.0–1.0>,
+      "Verbal Griefing": <0.0–1.0>,
+      "Profanity / General Hostility": <0.0–1.0>
+    },
+    "supporting_quotes": ["<exact substring>", ...],
+    "harm_candidate": <true|false>
+  },
+  "layer2": {
+    "target_analysis": "<one sentence: who is the grammatical target?>",
+    "override": "KEEP" | "DOWNGRADE" | "CLEAR_ALL",
+    "rule_applied": "A" | "B" | "C" | "D" | "E" | "F",
+    "adjusted_categories": ["<category name>", ...],
+    "policy_reason": "<brief explanation referencing the rule>",
+    "adjusted_confidence": <0.0–1.0>
+  },
+  "layer3": {
+    "verdict": "HARMFUL" | "SAFE",
+    "action": "RECOMMEND" | "NO_ACTION",
+    "recommended_report_categories": ["<category from the list>", ...],
+    "replacement_suggestion": "<string or null>",
+    "explanation": "<1–2 sentence plain-language summary>"
+  }
+}`;
+
+function buildCombinedPrompt(message, context) {
+  const ctx = context ? `\nContext window (prior messages):\n${context}` : '';
+  return `${ctx}\n\nMessage to analyze:\n"${message}"`;
+}
+
 function buildLayer1Prompt(message, context) {
   const ctx = context ? `\nContext window (prior messages):\n${context}` : '';
   return `${ctx}\n\nTarget message to analyze:\n"${message}"`;
@@ -122,7 +189,9 @@ module.exports = {
   LAYER1_SYSTEM,
   LAYER2_SYSTEM,
   LAYER3_SYSTEM,
+  COMBINED_SYSTEM,
   buildLayer1Prompt,
   buildLayer2Prompt,
   buildLayer3Prompt,
+  buildCombinedPrompt,
 };
