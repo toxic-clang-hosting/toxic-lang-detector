@@ -5,27 +5,35 @@ const {
   LAYER1_SYSTEM,
   LAYER2_SYSTEM,
   LAYER3_SYSTEM,
+  COMBINED_SYSTEM,
   buildLayer1Prompt,
   buildLayer2Prompt,
   buildLayer3Prompt,
+  buildCombinedPrompt,
 } = require('./prompts');
 
+const FAST_MODE = process.env.FAST_MODE === 'true';
+
 /**
- * Analyze a single message through all 3 layers.
- * @param {string} message
- * @param {string|null} context  - optional prior messages as plain text
- * @param {object} settings      - { provider, model, apiKey }
- * @returns {Promise<object>}    - { layer1, layer2, layer3, message }
+ * Analyze a single message — fast mode (1 API call) or standard (3 API calls).
  */
 async function analyzeOne(message, context, settings) {
-  // Layer 1
+  if (FAST_MODE) {
+    const result = await callLLM({
+      ...settings,
+      system: COMBINED_SYSTEM,
+      user: buildCombinedPrompt(message, context),
+    });
+    return { message, layer1: result.layer1, layer2: result.layer2, layer3: result.layer3 };
+  }
+
+  // Standard 3-call pipeline
   const layer1 = await callLLM({
     ...settings,
     system: LAYER1_SYSTEM,
     user: buildLayer1Prompt(message, context),
   });
 
-  // Layer 2 – only if harm candidate
   let layer2;
   if (layer1.harm_candidate) {
     layer2 = await callLLM({
@@ -42,7 +50,6 @@ async function analyzeOne(message, context, settings) {
     };
   }
 
-  // Layer 3 – always
   const layer3 = await callLLM({
     ...settings,
     system: LAYER3_SYSTEM,
