@@ -218,7 +218,8 @@
         addMessageToChat(text, 'me');
         input.value = '';
 
-        // SILENT LOGGING: Call the API in the background for data comparison later
+        // SILENT LOGGING: Run the LLM on every message in the background so the
+        // verdict is recorded for comparison, even though the participant sees nothing.
         try {
             const response = await fetch('/api/analyze', {
                 method: 'POST',
@@ -226,8 +227,11 @@
                 body: JSON.stringify({ messages: [{ message: text }] })
             });
             const data = await response.json();
-            saveLog(text, 'control_send', data.results[0]);
+            const apiResult = data.results?.[0] || null;
+            const flagged = apiResult?.layer3?.action === 'RECOMMEND';
+            saveLog(text, flagged ? 'control_toxic_send' : 'control_normal_send', apiResult);
         } catch (e) {
+            console.error('API error:', e);
             saveLog(text, 'control_send_error', null);
         }
     }
