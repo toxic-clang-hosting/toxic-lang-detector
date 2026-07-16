@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>In-Game Chat Prototype - Friction</title>
+    <title>In-Game Chat Prototype - Friction (Condition 2)</title>
     <style>
         :root {
             --bg-color: #000; --chat-bg: #ffffff; --primary: #4f46e5; --primary-hover: #4338ca;
@@ -13,7 +13,7 @@
 
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; overflow: hidden; background: var(--bg-color); }
 
-        /* --- Overlay Screens (Identical to pdn.html) --- */
+        /* --- Overlay Screens (Identical across PDN, 2pdn, 3pdn) --- */
         .overlay-screen {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0,0,0,0.9); z-index: 100; display: flex;
@@ -71,7 +71,7 @@
         .input-area { padding: 16px; border-top: 1px solid var(--secondary); display: flex; gap: 10px; background: var(--chat-bg); }
         input[type="text"] { flex: 1; padding: 12px; border: 1px solid var(--secondary); border-radius: 24px; outline: none; }
         button.send-btn { background: var(--primary); color: white; border: none; padding: 0 20px; border-radius: 24px; cursor: pointer; font-weight: 600; }
-        
+
         /* Modal - Friction/Timer Version */
         .modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; backdrop-filter: blur(4px); z-index: 10; }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
@@ -97,7 +97,7 @@
 
 <div id="consentScreen" class="overlay-screen" style="display:none;">
     <div class="intro-card">
-        <p>Imagine you are playing an <span id="unlockWord" style="color: var(--primary); font-weight: bold; cursor: pointer; text-decoration: underline;">online</span> game.</p> 
+        <p>Imagine you are playing an <span id="unlockWord" style="color: var(--primary); font-weight: bold; cursor: pointer; text-decoration: underline;">online</span> game.</p>
         <p>You must actively participate in the chat as you would in a game and complete the follow-up survey after to receive credit.</p>
         <p><strong>Please click the word "online" to proceed.</strong></p>
         <button id="understandBtn" class="start-btn" disabled onclick="fakeConnecting()">I understand</button>
@@ -150,7 +150,7 @@
         logs: []
     };
 
-    let ytPlayer, modalStartTime = 0, originalMessage = "";
+    let ytPlayer, modalStartTime = 0, originalMessage = "", apiResult = null;
 
     function onYouTubeIframeAPIReady() {
         ytPlayer = new YT.Player('player', {
@@ -160,7 +160,7 @@
         });
     }
 
-    // --- Automated Bot Script (Identical to pdn.html) ---
+    // --- Automated Bot Script (Identical across all conditions) ---
     const scriptedMessages = [
         { time: 5000, text: "i've literally never played this game before lol" },
         { time: 30000, text: "hey can you help me figure out what's going on in this match?" },
@@ -203,11 +203,11 @@
     function fakeConnecting() {
         document.getElementById('consentScreen').style.display = 'none';
         document.getElementById('loadingScreen').style.display = 'flex';
-        setTimeout(startChat, 4000); 
+        setTimeout(startChat, 4000);
     }
 
     // --- Timer Logic (10 Minutes) ---
-    let totalSeconds = 600; 
+    let totalSeconds = 600;
     let timerInterval;
 
     function startChat() {
@@ -217,7 +217,7 @@
 
         timerInterval = setInterval(updateTimer, 1000);
         scheduleBotMessages();
-        setTimeout(finishStudy, 600000); 
+        setTimeout(finishStudy, 600000);
     }
 
     function updateTimer() {
@@ -228,55 +228,76 @@
         if (totalSeconds <= 0) clearInterval(timerInterval);
     }
 
-    // --- Chat Logic ---
+    // --- Chat Logic (LLM-triggered friction) ---
     const input = document.getElementById('messageInput'), sendBtn = document.getElementById('sendBtn'), modal = document.getElementById('interventionModal');
-    const toxicKeywords = ['stupid', 'idiot', 'suck', 'fuck', 'bitch', 'trash', 'bot'];
 
     sendBtn.addEventListener('click', handleSend);
     input.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
 
-    function handleSend() {
+    async function handleSend() {
         const text = input.value.trim();
         if (!text) return;
-        if (toxicKeywords.some(kw => text.toLowerCase().includes(kw))) {
-            originalMessage = text; input.value = ''; triggerIntervention(text);
-        } else {
-            addMessageToChat(text, 'me'); saveLog(text, 'direct_send', 0); input.value = '';
-        }
-    }
 
-    async function triggerIntervention(text) {
-        if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
-        modalStartTime = Date.now();
-        modal.classList.add('active');
-        
-        let timeLeft = 5;
-        const timerLabel = document.getElementById('frictionTimer');
-        const actionBtn = document.getElementById('sendAnywayBtn');
-        actionBtn.disabled = true;
+        input.value = '';
+        input.disabled = true;
+        sendBtn.disabled = true;
 
-        const countdown = setInterval(() => {
-            timeLeft--;
-            timerLabel.innerText = timeLeft + "s";
-            if (timeLeft <= 0) {
-                clearInterval(countdown);
-                timerLabel.innerText = "Ready";
-                actionBtn.disabled = false;
-            }
-        }, 1000);
-
-        // API Call (Background logging of toxicity score)
         try {
-            await fetch('/api/analyze', {
+            const response = await fetch('/api/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ messages: [{ message: text }] })
             });
-        } catch (e) { console.error("Logging Error:", e); }
+            const data = await response.json();
+            apiResult = data.results?.[0] || null; // Store for logging
+            const layer3 = apiResult?.layer3;
+
+            if (layer3?.action === 'RECOMMEND') {
+                originalMessage = text;
+                triggerIntervention();
+            } else {
+                addMessageToChat(text, 'me');
+                saveLog(text, 'direct_send', 0);
+            }
+        } catch (e) {
+            console.error("API Error:", e);
+            apiResult = null;
+            addMessageToChat(text, 'me');
+            saveLog(text, 'direct_send_api_error', 0);
+        } finally {
+            input.disabled = false;
+            sendBtn.disabled = false;
+            input.focus();
+        }
+    }
+
+    // --- Friction Modal (5s forced wait, no AI suggestion shown) ---
+    function triggerIntervention() {
+        if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
+        modalStartTime = Date.now();
+        modal.classList.add('active');
+
+        let timeLeft = 5;
+        const timerLabel = document.getElementById('frictionTimer');
+        const actionBtn = document.getElementById('sendAnywayBtn');
+        actionBtn.disabled = true;
+        timerLabel.innerText = timeLeft + "s";
+
+        const countdown = setInterval(() => {
+            timerLabel.innerText = --timeLeft + "s";
+            if (timeLeft <= 0) { clearInterval(countdown); timerLabel.innerText = "Ready"; actionBtn.disabled = false; }
+        }, 1000);
     }
 
     function saveLog(msg, type, latency) {
-        participantData.logs.push({ timestamp: new Date().toISOString(), content: msg, interactionType: type, latencySeconds: latency });
+        participantData.logs.push({
+            timestamp: new Date().toISOString(),
+            content: msg,
+            interactionType: type,
+            latencySeconds: latency,
+            api_data: apiResult // Parity: logs LLM verdict even in friction group
+        });
+        apiResult = null; // Reset after each log
     }
 
     window.sendOriginal = function() {
@@ -286,9 +307,13 @@
     };
 
     window.cancelSend = function() {
-        input.value = originalMessage; 
-        input.focus();
         saveLog(originalMessage, 'friction_cancelled', (Date.now() - modalStartTime)/1000);
+
+        // Put the original text back into the box so they can actually edit it
+        const inputField = document.getElementById('messageInput');
+        inputField.value = originalMessage;
+        inputField.focus();
+
         resumeExperiment();
     };
 
