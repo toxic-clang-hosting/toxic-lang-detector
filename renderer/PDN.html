@@ -41,6 +41,8 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+    
+
         /* --- Chat UI --- */
         #timerDisplay {
             position: fixed; top: 20px; right: 20px;
@@ -82,6 +84,14 @@
         .btn-primary { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; }
         .btn-secondary { background: transparent; color: var(--text-sub); border: 1px solid var(--secondary); padding: 10px; border-radius: 8px; cursor: pointer; }
         .btn-link { background: none; border: none; color: var(--text-sub); font-size: 0.8rem; text-decoration: underline; cursor: pointer; }
+        .mini-spinner {
+            border: 3px solid #dcfce7;
+            border-top: 3px solid #16a34a;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+        }
     </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 </head>
@@ -130,13 +140,27 @@
             <div class="modal-card">
                 <h3 style="margin-top:0">Pause for a moment</h3>
                 <p style="font-size: 0.9rem; color: var(--text-sub);">We detected language that might not be constructive.</p>
-                <div class="suggestion-box">
-                    <span id="aiSuggestionText" style="color: #166534; font-weight: 500;">...</span>
+                
+                <div class="suggestion-box" style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 15px; border-radius: 8px; margin-bottom: 20px; min-height: 24px; display: flex; align-items: center; justify-content: center;">
+                    
+                    <!-- LOADING STATE -->
+                    <div id="aiLoadingState" style="display: flex; align-items: center; gap: 10px; color: #15803d; font-size: 0.95rem;">
+                        <div class="mini-spinner"></div>
+                        <span>AI-rewriting...</span>
+                    </div>
+
+                    <!-- READY STATE (Hidden by default) -->
+                    <div id="aiSuggestionState" style="display: none; color: #166534; font-weight: 500;">
+                        <span id="aiSuggestionText">...</span>
+                    </div>
+
                 </div>
+
                 <div class="actions">
-                    <button class="btn-primary" onclick="acceptSuggestion()">Use Suggestion</button>
+                    <!-- Added an ID and disabled it by default so they can't click while loading -->
+                    <button class="btn-primary" id="acceptAiBtn" onclick="acceptSuggestion()" disabled>Use AI-Suggestion</button>
                     <button class="btn-secondary" onclick="cancelSend()">Edit / Cancel</button>
-                    <button class="btn-link" onclick="sendOriginal()">Send original anyway</button>
+                    <button class="btn-link" onclick="sendOriginal()" style="background: none; border: none; color: var(--text-sub); text-decoration: underline; cursor: pointer; margin-top: 8px;">Send original anyway</button>
                 </div>
             </div>
         </div>
@@ -244,7 +268,7 @@ const participantData = {
     sendBtn.addEventListener('click', handleSend);
     input.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
 
-    async function handleSend() {
+  async function handleSend() {
         const text = input.value.trim();
         if (!text) return;
 
@@ -253,19 +277,22 @@ const participantData = {
         sendBtn.disabled = true;
 
         try {
+            // 1. Fetch quietly in the background
             const response = await fetch('/api/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ messages: [{ message: text }] })
             });
             const data = await response.json();
-            apiResult = data.results?.[0] || null; // Store for logging
+            apiResult = data.results?.[0] || null; 
             const layer3 = apiResult?.layer3;
 
             if (layer3?.action === 'RECOMMEND') {
                 originalMessage = text;
+                // 2. If toxic, pop the modal
                 triggerIntervention(text, layer3.replacement_suggestion);
             } else {
+                // 3. If safe, send instantly without interrupting
                 addMessageToChat(text, 'me');
                 saveLog(text, 'direct_send', 0);
             }
@@ -284,12 +311,31 @@ const participantData = {
     // --- Intervention Modal ---
     function triggerIntervention(text, suggestion) {
         if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
-        modalStartTime = Date.now();
-        aiText.textContent = suggestion || "let's keep it constructive";
-        aiText.style.color = "#166534";
+        
+        const modal = document.getElementById('interventionModal');
         modal.classList.add('active');
-    }
 
+        // 1. Instantly show Loading State and disable the button
+        document.getElementById('aiLoadingState').style.display = 'flex';
+        document.getElementById('aiSuggestionState').style.display = 'none';
+        document.getElementById('acceptAiBtn').disabled = true;
+
+        // 2. Hardcode exactly 1 second (1000 milliseconds) of spinning
+        setTimeout(() => {
+            // Swap UI to show the suggestion
+            document.getElementById('aiLoadingState').style.display = 'none';
+            document.getElementById('aiSuggestionState').style.display = 'block';
+            
+            aiText.textContent = suggestion || "let's keep it constructive";
+            aiText.style.color = "#166534";
+            
+            document.getElementById('acceptAiBtn').disabled = false;
+            
+            // Start the latency stopwatch NOW, so you only measure how long 
+            // they take to decide AFTER they can actually read the suggestion.
+            modalStartTime = Date.now(); 
+        }, 1000);
+    }
     function getLatency() { return (Date.now() - modalStartTime) / 1000; }
 
     function saveLog(msg, type, latency) {
