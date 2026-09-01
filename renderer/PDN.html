@@ -101,7 +101,7 @@
     <div class="intro-card">
         <h2 style="margin-top: 0;">Instructions</h2>
         <p>You will be interacting with another live participant and will be shown a simulated gaming screen to test a new chatbox. Chat as if you are playing a fast-paced multiplayer competitive game.</p>
-        <p><strong>You must chat and send messages for 10 minutes to receive credit.</strong></p>
+        <p><strong>You must chat and send messages for 5 minutes to receive credit.</strong></p>
         <p>After chatting, you will be automatically redirected to finish the survey.</p>
         <button class="start-btn" onclick="goToConsent()">Click to start interactive chat</button>
     </div>
@@ -124,7 +124,7 @@
     </div>
 </div>
 
-<div id="timerDisplay">10:00</div>
+<div id="timerDisplay">5:00</div>
 <div id="video-background"><div id="player"></div></div>
 
 <div class="main-wrapper" id="mainChatUI">
@@ -194,19 +194,19 @@ const participantData = {
     // --- Automated Bot Script (Identical across all conditions) ---
     const scriptedMessages = [
         { time: 5000, text: "i've literally never played this game before lol" },
-        { time: 30000, text: "hey can you help me figure out what's going on in this match?" },
-        { time: 70000, text: "are you actually this stupid or just pretending?" },
-        { time: 110000, text: "uninstall the game right now, you suck so much." },
-        { time: 160000, text: "how much did you pay to get carried to this rank? idiot." },
-        { time: 220000, text: "you are literally the worst player I have ever seen." },
-        { time: 280000, text: "what are you doing? help the team for once." },
-        { time: 340000, text: "im done playing with you, enjoy the loss." },
-        { time: 400000, text: "gg, we lose because our teammate is a brain dead bot." },
-        { time: 460000, text: "report this guy for throwing, absolute trash." },
-        { time: 510000, text: "wow, great job dying again. really helpful." },
-        { time: 550000, text: "is your monitor even turned on?" },
-        { time: 580000, text: "imagine being this bad at a free game." },
-        { time: 595000, text: "nice aim... do you play with a steering wheel?" }
+        { time: 25000, text: "hey can you help me figure out what's going on in this match?" },
+        { time: 45000, text: "are you actually this stupid or just pretending?" },
+        { time: 65000, text: "uninstall the game right now, you suck so much." },
+        { time: 85000, text: "how much did you pay to get carried to this rank? idiot." },
+        { time: 105000, text: "you are literally the worst player I have ever seen." },
+        { time: 125000, text: "what are you doing? help the team for once." },
+        { time: 145000, text: "im done playing with you, enjoy the loss." },
+        { time: 165000, text: "gg, we lose because our teammate is a brain dead bot." },
+        { time: 185000, text: "report this guy for throwing, absolute trash." },
+        { time: 205000, text: "wow, great job dying again. really helpful." },
+        { time: 225000, text: "is your monitor even turned on?" },
+        { time: 245000, text: "imagine being this bad at a free game." },
+        { time: 265000, text: "nice aim... do you play with a steering wheel?" }
     ];
 
     function scheduleBotMessages() {
@@ -237,8 +237,8 @@ const participantData = {
         setTimeout(startChat, 4000);
     }
 
-    // --- Timer Logic (10 Minutes) ---
-    let totalSeconds = 600;
+    // --- Timer Logic (5 Minutes) ---
+    let totalSeconds = 300;
     let timerInterval;
 
     function startChat() {
@@ -248,7 +248,7 @@ const participantData = {
 
         timerInterval = setInterval(updateTimer, 1000);
         scheduleBotMessages();
-        setTimeout(finishStudy, 600000);
+        setTimeout(finishStudy, 300000);
     }
 
     function updateTimer() {
