@@ -80,7 +80,7 @@
     <div class="intro-card">
         <h2 style="margin-top: 0;">Instructions</h2>
         <p>You will be interacting with another live participant and will be shown a simulated gaming screen to test a new chatbox. Chat as if you are playing a fast-paced multiplayer competitive game.</p>
-        <p><strong>You must chat and send messages for 10 minutes to receive credit.</strong></p>
+        <p><strong>You must chat and send messages for 5 minutes to receive credit.</strong></p>
         <p>After chatting, you will be automatically redirected to finish the survey.</p>
         <button class="start-btn" onclick="goToConsent()">Click to start interactive chat</button>
     </div>
@@ -103,7 +103,7 @@
     </div>
 </div>
 
-<div id="timerDisplay">10:00</div>
+<div id="timerDisplay">5:00</div>
 <div id="video-background"><div id="player"></div></div>
 
 <div class="main-wrapper" id="mainChatUI">
@@ -186,8 +186,8 @@ const participantData = {
         setTimeout(startChat, 4000); 
     }
 
-    // --- Timer Logic (10 Minutes) ---
-    let totalSeconds = 600; 
+    // --- Timer Logic (5 Minutes) ---
+    let totalSeconds = 300; 
     let timerInterval;
 
     function startChat() {
@@ -197,7 +197,7 @@ const participantData = {
 
         timerInterval = setInterval(updateTimer, 1000);
         scheduleBotMessages();
-        setTimeout(finishStudy, 600000); 
+        setTimeout(finishStudy, 300000); 
     }
 
     function updateTimer() {
