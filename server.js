@@ -46,7 +46,7 @@ app.post('/api/analyze', async (req, res) => {
   }
 });
 
-// Minimal Log Offloading Endpoint
+// Append all overflow logs into a single CSV sheet on GitHub
 app.post('/api/save-logs', async (req, res) => {
   try {
     const { survey1_id, condition, chatlog } = req.body ?? {};
@@ -55,32 +55,49 @@ app.post('/api/save-logs', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Missing survey1_id parameter' });
     }
 
-    // Strictly restrict saved payload to survey1_id, condition, and compressed chatlog
-    const minimalPayload = {
-      survey1_id: survey1_id,
-      condition: condition || 'unknown',
-      chatlog: chatlog || ''
-    };
+    const FILE_PATH = 'logs/overflow_logs.csv';
+    const timestamp = new Date().toISOString();
 
-    const filePath = `logs/${survey1_id}_${Date.now()}.json`;
-    const payloadString = JSON.stringify(minimalPayload, null, 2);
-    const contentBase64 = Buffer.from(payloadString).toString('base64');
+    // Utility to format values safely for CSV columns
+    const safeCsv = (val) => `"${String(val || '').replace(/"/g, '""')}"`;
+    const newRow = `${safeCsv(survey1_id)},${safeCsv(condition)},${safeCsv(timestamp)},${safeCsv(chatlog)}\n`;
+
+    let fileSha;
+    let existingContent = 'survey1_id,condition,timestamp,chatlog\n'; // Header for new file
+
+    // Check if the CSV file already exists on GitHub
+    try {
+      const { data } = await octokit.repos.getContent({
+        owner: REPO_OWNER,
+        repo: REPO_NAME,
+        path: FILE_PATH,
+      });
+      fileSha = data.sha;
+      existingContent = Buffer.from(data.content, 'base64').toString('utf-8');
+    } catch (err) {
+      if (err.status !== 404) throw err; // Re-throw if error is not 'File Not Found'
+    }
+
+    // Append new participant row to the sheet
+    const updatedContent = existingContent + newRow;
+    const contentBase64 = Buffer.from(updatedContent).toString('base64');
 
     await octokit.repos.createOrUpdateFileContents({
       owner: REPO_OWNER,
       repo: REPO_NAME,
-      path: filePath,
-      message: `Save minimal logs for user ${survey1_id}`,
+      path: FILE_PATH,
+      message: `Append overflow log for user ${survey1_id}`,
       content: contentBase64,
+      sha: fileSha, // Required by GitHub API when updating an existing file
       branch: 'main'
     });
 
-    console.log(`Minimal log saved to GitHub: ${filePath}`);
-    return res.json({ ok: true, path: filePath });
+    console.log(`Appended entry for ${survey1_id} to ${FILE_PATH}`);
+    return res.json({ ok: true, path: FILE_PATH });
 
   } catch (error) {
-    console.error('Error committing to GitHub:', error);
-    return res.status(500).json({ ok: false, error: 'Failed to save log', details: error.message });
+    console.error('Error updating CSV on GitHub:', error);
+    return res.status(500).json({ ok: false, error: 'Failed to update sheet', details: error.message });
   }
 });
 
