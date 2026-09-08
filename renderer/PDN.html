@@ -389,20 +389,40 @@ const participantData = {
         messagesList.scrollTop = messagesList.scrollHeight; // Auto-scroll to bottom
     }
 
-    function finishStudy() {
-    // 1. Serialize full logs array (includes all messages, latencies, and api_data)
+async function finishStudy() {
+    // 1. Serialize and compress full chat logs array using LZString
     const fullJson = JSON.stringify(participantData.logs);
-
-    // 2. Compress JSON payload using LZ-String
     const compressedLogs = LZString.compressToEncodedURIComponent(fullJson);
 
-    // 3. New USC Qualtrics Survey 2 Link
+    // 2. Base Qualtrics URL
     const qualtricsBaseUrl = "https://usc.qualtrics.com/jfe/form/SV_eA5NyF7paLrHvQq";
     
-    // 4. Construct URL parameters
-    const finalUrl = `${qualtricsBaseUrl}?chat_logs=${compressedLogs}&survey1_id=${encodeURIComponent(participantData.userId)}&condition=${encodeURIComponent(participantData.condition)}`;
+    // 3. Construct URL
+    let finalUrl = `${qualtricsBaseUrl}?chat_logs=${compressedLogs}&survey1_id=${encodeURIComponent(participantData.userId)}&condition=${encodeURIComponent(participantData.condition)}`;
 
-    // 5. Redirect user to Survey 2
+    // 4. Fallback if URL exceeds 2000 character limit
+    if (finalUrl.length > 2000) {
+        console.warn('URL exceeds 2000 characters. Offloading minimal chatlog to GitHub backend...');
+        
+        try {
+            await fetch('/api/save-logs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    survey1_id: participantData.userId,
+                    condition: participantData.condition,
+                    chatlog: compressedLogs
+                })
+            });
+        } catch (err) {
+            console.error('Error offloading logs to backend:', err);
+        }
+
+        // Redirect to Qualtrics without passing chat_logs in query string
+        finalUrl = `${qualtricsBaseUrl}?survey1_id=${encodeURIComponent(participantData.userId)}&condition=${encodeURIComponent(participantData.condition)}&logs_saved_external=true`;
+    }
+
+    // 5. Redirect user to Qualtrics
     window.top.location.href = finalUrl;
 }
 </script>
