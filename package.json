@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "web": "node server.js",
-    "electron": "electron ."
+    "electron": "electron .",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

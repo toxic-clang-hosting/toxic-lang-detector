@@ -14,6 +14,47 @@ const {
 
 const FAST_MODE = process.env.FAST_MODE === 'true';
 
+function normalizeDecision(result) {
+  const { layer1, layer2, layer3 } = result;
+  if (typeof layer1?.harm_candidate !== 'boolean' || !layer3 || typeof layer3 !== 'object') {
+    throw new Error('Incomplete model analysis');
+  }
+  if (!layer1.harm_candidate) {
+    result.layer2 = {
+      target_analysis: 'No harmful expression detected.',
+      override: 'CLEAR_ALL',
+      rule_applied: 'B',
+      adjusted_categories: [],
+      policy_reason: 'Layer 1 found no harm candidate.',
+      adjusted_confidence: 0,
+    };
+  } else if (!['KEEP', 'DOWNGRADE', 'CLEAR_ALL'].includes(layer2?.override)) {
+    throw new Error('Invalid policy override from model');
+  }
+
+  const intervene = layer1.harm_candidate && result.layer2.override === 'KEEP';
+  layer3.verdict = intervene ? 'HARMFUL' : 'SAFE';
+  layer3.action = intervene ? 'RECOMMEND' : 'NO_ACTION';
+  if (!intervene) {
+    layer3.recommended_report_categories = [];
+    layer3.replacement_suggestion = null;
+    delete layer3.suggestion_fallback;
+  } else {
+    if (!Array.isArray(layer3.recommended_report_categories)) {
+      throw new Error('Missing report categories from model');
+    }
+    if (typeof layer3.replacement_suggestion !== 'string' || !layer3.replacement_suggestion.trim()) {
+      const original = String(result.message ?? '');
+      const fallback = "let's keep playing";
+      layer3.replacement_suggestion = original === original.toUpperCase() && /[A-Z]/.test(original)
+        ? fallback.toUpperCase()
+        : fallback;
+      layer3.suggestion_fallback = true;
+    }
+  }
+  return result;
+}
+
 /**
  * Analyze a single message — fast mode (1 API call) or standard (3 API calls).
  */
@@ -24,7 +65,7 @@ async function analyzeOne(message, context, settings) {
       system: COMBINED_SYSTEM,
       user: buildCombinedPrompt(message, context),
     });
-    return { message, layer1: result.layer1, layer2: result.layer2, layer3: result.layer3 };
+    return normalizeDecision({ message, layer1: result.layer1, layer2: result.layer2, layer3: result.layer3 });
   }
 
   // Standard 3-call pipeline
@@ -39,7 +80,7 @@ async function analyzeOne(message, context, settings) {
     layer2 = await callLLM({
       ...settings,
       system: LAYER2_SYSTEM,
-      user: buildLayer2Prompt(message, layer1),
+      user: buildLayer2Prompt(message, layer1, context),
     });
   } else {
     layer2 = {
@@ -53,10 +94,10 @@ async function analyzeOne(message, context, settings) {
   const layer3 = await callLLM({
     ...settings,
     system: LAYER3_SYSTEM,
-    user: buildLayer3Prompt(message, layer1, layer2),
+    user: buildLayer3Prompt(message, layer1, layer2, context),
   });
 
-  return { message, layer1, layer2, layer3 };
+  return normalizeDecision({ message, layer1, layer2, layer3 });
 }
 
 /**
@@ -92,4 +133,4 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-module.exports = { analyzeOne, analyzeMessages };
+module.exports = { analyzeOne, analyzeMessages, normalizeDecision };

@@ -221,6 +221,7 @@ const participantData = {
         // CONTROL: Immediately post the message
         addMessageToChat(text, 'me');
         input.value = '';
+        const logEntry = saveLog(text, 'control_pending', null);
 
         // SILENT LOGGING: Run the LLM on every message in the background so the
         // verdict is recorded for comparison, even though the participant sees nothing.
@@ -231,22 +232,28 @@ const participantData = {
                 body: JSON.stringify({ messages: [{ message: text }] })
             });
             const data = await response.json();
-            const apiResult = data.results?.[0] || null;
-            const flagged = apiResult?.layer3?.action === 'RECOMMEND';
-            saveLog(text, flagged ? 'control_toxic_send' : 'control_normal_send', apiResult);
+            const analysis = data.results?.[0];
+            if (!response.ok || !data.ok || analysis?.error || !['RECOMMEND', 'NO_ACTION'].includes(analysis?.layer3?.action)) {
+                throw new Error(analysis?.error || data.error || 'Analysis unavailable');
+            }
+            logEntry.api_verdict = analysis;
+            logEntry.interactionType = analysis.layer3.action === 'RECOMMEND' ? 'control_toxic_send' : 'control_normal_send';
         } catch (e) {
             console.error('API error:', e);
-            saveLog(text, 'control_send_error', null);
+            logEntry.interactionType = 'control_send_error';
+            logEntry.analysis_error = e.message;
         }
     }
 
 function saveLog(msg, type, apiData) {
-    participantData.logs.push({ 
+    const entry = {
         timestamp: new Date().toISOString(), 
         content: msg, 
         interactionType: type,
-        api_data: apiData
-    });
+        api_verdict: apiData
+    };
+    participantData.logs.push(entry);
+    return entry;
 }
 
     function addMessageToChat(text, sender) {

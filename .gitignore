@@ -16,3 +16,6 @@ out/
 
 # Claude editor
 .claude/
+
+# Local project notes
+/docs/PROJECT_NOTES.md

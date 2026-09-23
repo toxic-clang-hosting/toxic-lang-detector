@@ -151,7 +151,7 @@ const participantData = {
     logs: []
 };
 
-    let ytPlayer, modalStartTime = 0, originalMessage = "", apiResult = null;
+    let ytPlayer, modalStartTime = 0, originalMessage = "", pendingAnalysis = null;
 
     function onYouTubeIframeAPIReady() {
         ytPlayer = new YT.Player('player', {
@@ -237,7 +237,7 @@ const participantData = {
 
     async function handleSend() {
         const text = input.value.trim();
-        if (!text) return;
+        if (!text || modal.classList.contains('active') || sendBtn.disabled) return;
 
         input.value = '';
         input.disabled = true;
@@ -250,25 +250,28 @@ const participantData = {
                 body: JSON.stringify({ messages: [{ message: text }] })
             });
             const data = await response.json();
-            apiResult = data.results?.[0] || null; // Store for logging
-            const layer3 = apiResult?.layer3;
+            const analysis = data.results?.[0];
+            if (!response.ok || !data.ok || analysis?.error || !['RECOMMEND', 'NO_ACTION'].includes(analysis?.layer3?.action)) {
+                throw new Error(analysis?.error || data.error || 'Analysis unavailable');
+            }
+            const layer3 = analysis.layer3;
 
             if (layer3?.action === 'RECOMMEND') {
                 originalMessage = text;
+                pendingAnalysis = analysis;
                 triggerIntervention();
             } else {
                 addMessageToChat(text, 'me');
-                saveLog(text, 'direct_send', 0);
+                saveLog(text, 'direct_send', 0, analysis);
             }
         } catch (e) {
             console.error("API Error:", e);
-            apiResult = null;
             addMessageToChat(text, 'me');
-            saveLog(text, 'direct_send_api_error', 0);
+            saveLog(text, 'direct_send_api_error', 0, null, e.message);
         } finally {
             input.disabled = false;
             sendBtn.disabled = false;
-            input.focus();
+            if (!modal.classList.contains('active')) input.focus();
         }
     }
 
@@ -290,25 +293,26 @@ const participantData = {
         }, 1000);
     }
 
-    function saveLog(msg, type, latency) {
-        participantData.logs.push({
+    function saveLog(msg, type, latency, analysis = null, error = null) {
+        const entry = {
             timestamp: new Date().toISOString(),
             content: msg,
             interactionType: type,
             latencySeconds: latency,
-            api_data: apiResult // Parity: logs LLM verdict even in friction group
-        });
-        apiResult = null; // Reset after each log
+            api_data: analysis
+        };
+        if (error) entry.analysis_error = error;
+        participantData.logs.push(entry);
     }
 
     window.sendOriginal = function() {
         addMessageToChat(originalMessage, 'me');
-        saveLog(originalMessage, 'friction_sent_original', (Date.now() - modalStartTime)/1000);
+        saveLog(originalMessage, 'friction_sent_original', (Date.now() - modalStartTime)/1000, pendingAnalysis);
         resumeExperiment();
     };
 
     window.cancelSend = function() {
-        saveLog(originalMessage, 'friction_cancelled', (Date.now() - modalStartTime)/1000);
+        saveLog(originalMessage, 'friction_cancelled', (Date.now() - modalStartTime)/1000, pendingAnalysis);
 
         // Put the original text back into the box so they can actually edit it
         const inputField = document.getElementById('messageInput');
@@ -318,7 +322,7 @@ const participantData = {
         resumeExperiment();
     };
 
-    function resumeExperiment() { modal.classList.remove('active'); if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo(); }
+    function resumeExperiment() { modal.classList.remove('active'); pendingAnalysis = null; if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo(); }
 
     function addMessageToChat(text, sender) {
         const div = document.createElement('div'); div.className = `message ${sender}`; div.textContent = text;

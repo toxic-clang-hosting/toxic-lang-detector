@@ -34,11 +34,18 @@ app.use(express.static(path.join(__dirname, 'renderer')));
 // AI Text Analysis Endpoint
 app.post('/api/analyze', async (req, res) => {
   const { messages, settings } = req.body ?? {};
-  if (!Array.isArray(messages) || messages.length === 0)
-    return res.status(400).json({ ok: false, error: 'messages must be a non-empty array' });
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > 500 ||
+      messages.some(item => !item || typeof item.message !== 'string' ||
+        !item.message.trim() || item.message.length > 2000 ||
+        (item.context != null && (typeof item.context !== 'string' || item.context.length > 4000)))) {
+    return res.status(400).json({ ok: false, error: 'messages must contain 1–500 valid chat messages' });
+  }
+  const delayMs = settings?.delayMs ?? 300;
+  if (!Number.isInteger(delayMs) || delayMs < 0 || delayMs > 5000) {
+    return res.status(400).json({ ok: false, error: 'delayMs must be between 0 and 5000' });
+  }
   try {
-    // Merge: client may pass delayMs preference, but credentials always come from server
-    const mergedSettings = { ...settings, ...SERVER_SETTINGS };
+    const mergedSettings = { delayMs, ...SERVER_SETTINGS };
     const results = await analyzeMessages(messages, mergedSettings);
     res.json({ ok: true, results });
   } catch (err) {

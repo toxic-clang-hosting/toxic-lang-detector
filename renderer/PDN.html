@@ -181,7 +181,7 @@ const participantData = {
     logs: []
 };
 
-    let ytPlayer, modalStartTime = 0, originalMessage = "", apiResult = null;
+    let ytPlayer, modalStartTime = 0, originalMessage = "", pendingAnalysis = null;
 
     function onYouTubeIframeAPIReady() {
         ytPlayer = new YT.Player('player', {
@@ -270,7 +270,7 @@ const participantData = {
 
   async function handleSend() {
         const text = input.value.trim();
-        if (!text) return;
+        if (!text || modal.classList.contains('active') || sendBtn.disabled) return;
 
         input.value = '';
         input.disabled = true;
@@ -284,27 +284,30 @@ const participantData = {
                 body: JSON.stringify({ messages: [{ message: text }] })
             });
             const data = await response.json();
-            apiResult = data.results?.[0] || null; 
-            const layer3 = apiResult?.layer3;
+            const analysis = data.results?.[0];
+            if (!response.ok || !data.ok || analysis?.error || !['RECOMMEND', 'NO_ACTION'].includes(analysis?.layer3?.action)) {
+                throw new Error(analysis?.error || data.error || 'Analysis unavailable');
+            }
+            const layer3 = analysis.layer3;
 
             if (layer3?.action === 'RECOMMEND') {
                 originalMessage = text;
+                pendingAnalysis = analysis;
                 // 2. If toxic, pop the modal
                 triggerIntervention(text, layer3.replacement_suggestion);
             } else {
                 // 3. If safe, send instantly without interrupting
                 addMessageToChat(text, 'me');
-                saveLog(text, 'direct_send', 0);
+                saveLog(text, 'direct_send', 0, analysis);
             }
         } catch (err) {
             console.error('API error:', err);
-            apiResult = null;
             addMessageToChat(text, 'me');
-            saveLog(text, 'direct_send_api_error', 0);
+            saveLog(text, 'direct_send_api_error', 0, null, err.message);
         } finally {
             input.disabled = false;
             sendBtn.disabled = false;
-            input.focus();
+            if (!modal.classList.contains('active')) input.focus();
         }
     }
 
@@ -338,34 +341,35 @@ const participantData = {
     }
     function getLatency() { return (Date.now() - modalStartTime) / 1000; }
 
-    function saveLog(msg, type, latency) {
-        participantData.logs.push({
+    function saveLog(msg, type, latency, analysis = null, error = null) {
+        const entry = {
             timestamp: new Date().toISOString(),
             content: msg,
             interactionType: type,
             latencySeconds: latency,
-            api_data: apiResult // Parity: logs LLM verdict alongside the interaction
-        });
-        apiResult = null; // Reset after each log
+            api_data: analysis
+        };
+        if (error) entry.analysis_error = error;
+        participantData.logs.push(entry);
     }
 
     window.acceptSuggestion = function() {
         const latency = getLatency();
         addMessageToChat(aiText.textContent, 'me');
-        saveLog(aiText.textContent, 'accepted_suggestion', latency);
+        saveLog(aiText.textContent, 'accepted_suggestion', latency, pendingAnalysis);
         resumeExperiment();
     };
 
     window.sendOriginal = function() {
         const latency = getLatency();
         addMessageToChat(originalMessage, 'me');
-        saveLog(originalMessage, 'sent_original', latency);
+        saveLog(originalMessage, 'sent_original', latency, pendingAnalysis);
         resumeExperiment();
     };
 
     window.cancelSend = function() {
         const latency = getLatency();
-        saveLog(originalMessage, 'cancelled', latency);
+        saveLog(originalMessage, 'cancelled', latency, pendingAnalysis);
 
         // Put the original text back into the box so they can actually edit it
         const inputField = document.getElementById('messageInput');
@@ -377,6 +381,7 @@ const participantData = {
 
     function resumeExperiment() {
         modal.classList.remove('active');
+        pendingAnalysis = null;
         if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo();
     }
 
